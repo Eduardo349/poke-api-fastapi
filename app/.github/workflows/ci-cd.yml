@@ -1,0 +1,60 @@
+name: Pipeline CI/CD PokéAPI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 🧪 ETAPA 1: BUILD E TESTES (CI)
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      # Sobbe um banco PostgreSQL real no GitHub para os testes passarem
+      db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: pokebase
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Baixar código do repositório
+      uses: actions/checkout@v4
+
+    - name: Configurar o Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar Dependências (Build)
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Rodar Testes Unitários (Test)
+      env:
+        # Aponta para o banco temporário do GitHub Actions
+        DATABASE_URL: postgresql://user:password@localhost:5432/pokebase
+      run: |
+        pytest
+
+  # 🚀 ETAPA 2: DEPLOY AUTOMÁTICO (CD)
+  deploy:
+    needs: build-and-test # Só roda se os testes passarem!
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Chamar Webhook de Deploy da Render
+      run: |
+        curl -X GET "${{ secrets.RENDER_DEPLOY_HOOK }}"
